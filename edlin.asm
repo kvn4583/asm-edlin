@@ -42,13 +42,11 @@ _start:
 	mov ecx, marker
 	int 0x80
 
-
-	; read input--File descriptor for stdin is 0
-	mov eax, 3		; syscall number for read
-	mov ebx, 0		; file descriptor for stdin
-	mov ecx, input	; variable to store input
-	mov edx, 80		; read 80 bytes
-	int 0x80		; invoke the kernel
+	; read first level of user input
+	push 80
+	push input
+	push 0
+	call read
 
 	; If second char is newline, continue to command phase
 	; else restart read input loop
@@ -75,12 +73,11 @@ command:
 	jmp _start
 
 append:
-	; read input--File descriptor for stdin is 0
-	mov eax, 3		; syscall number for read
-	mov ebx, 0		; file descriptor for stdin
-	mov ecx, input	; variable to store input
-	mov edx, 80		; read 80 bytes
-	int 0x80		; invoke the kernel
+	; read 80 chars of input for one line
+	push 80
+	push input
+	push 0
+	call read
 
 	mov edx, eax    	; write number of bytes read
 	mov eax, 4			; syscall number for write
@@ -91,12 +88,11 @@ append:
 	jmp _start
 
 print:
-	; Read from the file
-	mov ebx, [descriptor]    ; File descriptor (from open syscall)
-	mov eax, 3               ; System call number for read
-	mov ecx, content         ; Buffer to read into
-	mov edx, 552             ; Number of bytes to read (adjust as needed)
-	int 0x80                 ; Call the kernel
+	push 552
+	push content
+	mov eax, [descriptor]	; can't push onto stack directly
+	push eax
+	call read
 
 	; output the whole file
 	mov edx, eax    	; write number of bytes read
@@ -115,3 +111,22 @@ end:
 	mov eax, 1		; syscall number for exit
 	xor ebx, ebx	; exit code 0
 	int 0x80		; invoke the kernel
+
+;; functions
+
+read:
+	; arg1 - file descriptor (not pointer)
+	; arg2 - buffer to read into (pointer)
+	; arg3 - number of bytes to read
+	push ebp
+	mov ebp, esp
+
+	mov eax, 3
+	mov ebx, [ebp + 8]
+	mov ecx, [ebp + 12]
+	mov edx, [ebp + 16]
+	int 0x80
+
+	mov esp, ebp
+	pop ebp
+	ret
