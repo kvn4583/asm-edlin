@@ -11,12 +11,12 @@ section .bss
 	descriptor resb 4	; file descriptor
 
 section .data
-	marker db '> ', 0
-	filename db 'out.txt', 0
-	;content db 100
+	marker db "> ", 0
+	filename db "out.txt", 0
 
 section .text
 	global _start
+
 
 _start:
 
@@ -34,7 +34,6 @@ _start:
 	; Else store file descriptor in memory
 	mov [descriptor], eax
 
-
 	; Show marker designating user input
 	mov edx, 2		; write 2 bytes
 	mov eax, 4
@@ -50,10 +49,11 @@ _start:
 
 	; If second char is newline, continue to command phase
 	; else restart read input loop
-	inc ecx
+	inc ecx		; buffer left over from read syscall
 	cmp byte [ecx], 10
 	je command
 	jmp _start
+
 
 command:
 	dec ecx
@@ -72,6 +72,7 @@ command:
 
 	jmp _start
 
+
 append:
 	; read 80 chars of input for one line
 	push 80
@@ -79,13 +80,24 @@ append:
 	push 0
 	call read
 
+	; check for newline in second byte of input
+	inc ecx		; buffer left over from read syscall
+	cmp byte [ecx], 10
+
+	; if . then stop appending
+	dec ecx
+	cmp byte [ecx], 46
+	je _start
+
+	; write one line at a time
 	mov edx, eax    	; write number of bytes read
 	mov eax, 4			; syscall number for write
 	mov ebx, [descriptor]
-	mov ecx, input	; variable to write
+	mov ecx, input		; variable to write
 	int 0x80			; invoke the kernel
 
-	jmp _start
+	jmp append		; keep appending
+
 
 print:
 	push 552
@@ -130,3 +142,5 @@ read:
 	mov esp, ebp
 	pop ebp
 	ret
+
+
