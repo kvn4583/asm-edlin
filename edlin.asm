@@ -17,7 +17,6 @@ section .data
 section .text
 	global _start
 
-;; BUG: something is happening under _start before the main loop that allows the print section to work. Maybe we're losing the file descriptor? jmp loop is not behaving the same as jmp _start.
 
 _start:
 
@@ -35,24 +34,29 @@ _start:
 	; Else store file descriptor in memory
 	mov [descriptor], eax
 
-	loop:
-		; Show marker designating user input
-		mov edx, 2		; write 2 bytes
-		mov eax, 4
-		mov ebx, 1
-		mov ecx, marker
-		int 0x80
+loop:
+	; Show marker designating user input
+	mov edx, 2		; write 2 bytes
+	mov eax, 4
+	mov ebx, 1
+	mov ecx, marker
+	int 0x80
 
-		; read first level of user input
-		call readline
+	; read first level of user input
+	call readinput
 
-		; If second char is newline, continue to command phase
-		; else restart read input loop
-		inc ecx		; buffer left over from read syscall
-		cmp byte [ecx], 10
-		je command
-		;jmp _start
-		jmp loop	; so we don't open the file again
+	; if only newline was entered, loop again
+	cmp byte [ecx], 10
+	je loop
+
+	; If second char is newline, continue to command phase
+	inc ecx		; buffer left over from read syscall
+	cmp byte [ecx], 10
+	je command
+
+	; else restart read input loop
+	dec ecx		; reverse increment to restore ecx (necessary?)
+	jmp loop	; loop not _start so we don't open the file again
 
 command:
 	dec ecx
@@ -69,11 +73,10 @@ command:
 	cmp byte [ecx], 113
 	je end
 
-	;jmp _start
 	jmp loop
 
 append:
-	call readline
+	call readinput
 
 	; check for newline in second byte of input
 	inc ecx		; buffer left over from read syscall
@@ -94,7 +97,12 @@ append:
 	jmp append		; keep appending
 
 print:
-	call readfile
+	; read file contents
+	mov eax, 3
+	mov ebx, [descriptor]
+	mov ecx, content
+	mov edx, 552
+	int 0x80
 
 	; output the whole file
 	mov edx, eax    	; write number of bytes read
@@ -103,8 +111,18 @@ print:
 	mov ecx, content	; variable to write
 	int 0x80			; invoke the kernel
 
-	jmp _start
-	;jmp loop	; breaks subsequent prints!
+	; reset file pointer
+	mov eax, 19           ; lseek system call number
+	mov ebx, [descriptor] ; file descriptor
+	mov ecx, 0            ; offset (seek from the beginning of the file)
+	mov edx, 0            ; whence (SEEK_SET)
+	int 0x80              ; invoke the kernel
+
+	; Check for errors in the lseek syscall (in eax)
+	cmp eax, -1
+	je end 
+
+	jmp loop
 
 end:
 	mov eax, 6		; close file
@@ -118,15 +136,15 @@ end:
 
 ;; functions
 
-readfile:
-	mov eax, 3
-	mov ebx, [descriptor]
-	mov ecx, content
-	mov edx, 552
-	int 0x80
-	ret
+;readfile:
+;	mov eax, 3
+;	mov ebx, [descriptor]
+;	mov ecx, content
+;	mov edx, 552
+;	int 0x80
+;	ret
 
-readline:
+readinput:
 	mov eax, 3
 	mov ebx, 0
 	mov ecx, input
