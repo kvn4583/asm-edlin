@@ -17,6 +17,7 @@ section .data
 section .text
 	global _start
 
+;; BUG: something is happening under _start before the main loop that allows the print section to work. Maybe we're losing the file descriptor? jmp loop is not behaving the same as jmp _start.
 
 _start:
 
@@ -29,31 +30,29 @@ _start:
 
     ; Check for errors in the open syscall (in eax)
 	cmp eax, 0
-	jl  end		; quit if there was an error
+	jl end		; quit if there was an error
 
 	; Else store file descriptor in memory
 	mov [descriptor], eax
 
-	; Show marker designating user input
-	mov edx, 2		; write 2 bytes
-	mov eax, 4
-	mov ebx, 1
-	mov ecx, marker
-	int 0x80
+	loop:
+		; Show marker designating user input
+		mov edx, 2		; write 2 bytes
+		mov eax, 4
+		mov ebx, 1
+		mov ecx, marker
+		int 0x80
 
-	; read first level of user input
-	push 80
-	push input
-	push 0
-	call read
+		; read first level of user input
+		call readline
 
-	; If second char is newline, continue to command phase
-	; else restart read input loop
-	inc ecx		; buffer left over from read syscall
-	cmp byte [ecx], 10
-	je command
-	jmp _start
-
+		; If second char is newline, continue to command phase
+		; else restart read input loop
+		inc ecx		; buffer left over from read syscall
+		cmp byte [ecx], 10
+		je command
+		;jmp _start
+		jmp loop	; so we don't open the file again
 
 command:
 	dec ecx
@@ -70,15 +69,11 @@ command:
 	cmp byte [ecx], 113
 	je end
 
-	jmp _start
-
+	;jmp _start
+	jmp loop
 
 append:
-	; read 80 chars of input for one line
-	push 80
-	push input
-	push 0
-	call read
+	call readline
 
 	; check for newline in second byte of input
 	inc ecx		; buffer left over from read syscall
@@ -98,13 +93,8 @@ append:
 
 	jmp append		; keep appending
 
-
 print:
-	push 552
-	push content
-	mov eax, [descriptor]	; can't push onto stack directly
-	push eax
-	call read
+	call readfile
 
 	; output the whole file
 	mov edx, eax    	; write number of bytes read
@@ -114,6 +104,7 @@ print:
 	int 0x80			; invoke the kernel
 
 	jmp _start
+	;jmp loop	; breaks subsequent prints!
 
 end:
 	mov eax, 6		; close file
@@ -124,23 +115,23 @@ end:
 	xor ebx, ebx	; exit code 0
 	int 0x80		; invoke the kernel
 
+
 ;; functions
 
-read:
-	; arg1 - file descriptor (not pointer)
-	; arg2 - buffer to read into (pointer)
-	; arg3 - number of bytes to read
-	push ebp
-	mov ebp, esp
-
+readfile:
 	mov eax, 3
-	mov ebx, [ebp + 8]
-	mov ecx, [ebp + 12]
-	mov edx, [ebp + 16]
+	mov ebx, [descriptor]
+	mov ecx, content
+	mov edx, 552
 	int 0x80
+	ret
 
-	mov esp, ebp
-	pop ebp
+readline:
+	mov eax, 3
+	mov ebx, 0
+	mov ecx, input
+	mov edx, 80
+	int 0x80
 	ret
 
 
