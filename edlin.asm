@@ -50,6 +50,7 @@ loop:
 	je loop
 
 	; If second char is newline, continue to command phase
+	; increment to check second byte of input
 	inc ecx		; buffer left over from read syscall
 	cmp byte [ecx], 10
 	je command
@@ -59,6 +60,7 @@ loop:
 	jmp loop	; loop not _start so we don't open the file again
 
 command:
+	; decrement to check first byte of input
 	dec ecx
 
 	; if a then append
@@ -85,7 +87,8 @@ append:
 	; if . then stop appending
 	dec ecx
 	cmp byte [ecx], 46
-	je _start
+	;je _start
+	je loop
 
 	; write one line at a time
 	mov edx, eax    	; write number of bytes read
@@ -93,6 +96,8 @@ append:
 	mov ebx, [descriptor]
 	mov ecx, input		; variable to write
 	int 0x80			; invoke the kernel
+
+	call resetpointer
 
 	jmp append		; keep appending
 
@@ -112,11 +117,13 @@ print:
 	int 0x80			; invoke the kernel
 
 	; reset file pointer
-	mov eax, 19           ; lseek system call number
-	mov ebx, [descriptor] ; file descriptor
-	mov ecx, 0            ; offset (seek from the beginning of the file)
-	mov edx, 0            ; whence (SEEK_SET)
-	int 0x80              ; invoke the kernel
+	;mov eax, 19           ; lseek system call number
+	;mov ebx, [descriptor] ; file descriptor
+	;mov ecx, 0            ; offset (seek from the beginning of the file)
+	;mov edx, 0            ; whence (SEEK_SET)
+	;int 0x80              ; invoke the kernel
+	
+	call resetpointer
 
 	; Check for errors in the lseek syscall (in eax)
 	cmp eax, -1
@@ -145,6 +152,7 @@ end:
 ;	ret
 
 readinput:
+	; read user input
 	mov eax, 3
 	mov ebx, 0
 	mov ecx, input
@@ -152,4 +160,12 @@ readinput:
 	int 0x80
 	ret
 
+resetpointer:
+	; reset file pointer
+	mov eax, 19           ; lseek system call number
+	mov ebx, [descriptor] ; file descriptor
+	mov ecx, 0            ; offset (seek from the beginning of the file)
+	mov edx, 0            ; whence (SEEK_SET)
+	int 0x80              ; invoke the kernel
+	ret
 
