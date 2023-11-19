@@ -9,6 +9,7 @@ section .bss
 	input resb 80		; limit lines to 80 characters
 	content resb 552	; file contents
 	descriptor resb 4	; file descriptor
+	filesize resb 4		; size of previous file contents
 
 section .data
 	marker db "> ", 0
@@ -33,6 +34,7 @@ _start:
 
 	; Else store file descriptor in memory
 	mov [descriptor], eax
+
 
 loop:
 	; Show marker designating user input
@@ -59,6 +61,7 @@ loop:
 	dec ecx		; reverse increment to restore ecx (necessary?)
 	jmp loop	; loop not _start so we don't open the file again
 
+
 command:
 	; decrement to check first byte of input
 	dec ecx
@@ -66,6 +69,10 @@ command:
 	; if a then append
 	cmp byte [ecx], 97
 	je append
+
+	; if i then insert
+	cmp byte [ecx], 105
+	je insert 
 
 	; else if p then print
 	cmp byte [ecx], 112
@@ -77,37 +84,42 @@ command:
 
 	jmp loop
 
+
 append:
-	call readinput
+	call appendinput
+	jmp loop
 
-	; check for newline in second byte of input
-	inc ecx		; buffer left over from read syscall
-	cmp byte [ecx], 10
 
-	; if . then stop appending
-	dec ecx
-	cmp byte [ecx], 46
-	;je _start
-	je loop
+insert:
+	call readfile
+	mov [filesize], eax		; save number of bytes read
 
-	; write one line at a time
-	mov edx, eax    	; write number of bytes read
-	mov eax, 4			; syscall number for write
+	; delete file content
+	; truncate open file descriptor to zero bytes
+	mov eax, 93       ; System call number for ftruncate
 	mov ebx, [descriptor]
-	mov ecx, input		; variable to write
-	int 0x80			; invoke the kernel
+	mov ecx, 0        ; Set size to 0
+	int 0x80          ; Call the kernel
+
+	; Check for errors in the syscall (in eax)
+	cmp eax, 0
+	jl end
+
+	call appendinput
+
+	; append old file contents
+	mov edx, [filesize] 
+	mov eax, 4				; syscall number for write
+	mov ebx, [descriptor]	; file descriptor for stdout
+	mov ecx, content		; variable to write
+	int 0x80				; invoke the kernel
 
 	call resetpointer
+	jmp loop
 
-	jmp append		; keep appending
 
 print:
-	; read file contents
-	mov eax, 3
-	mov ebx, [descriptor]
-	mov ecx, content
-	mov edx, 552
-	int 0x80
+	call readfile
 
 	; output the whole file
 	mov edx, eax    	; write number of bytes read
@@ -116,13 +128,6 @@ print:
 	mov ecx, content	; variable to write
 	int 0x80			; invoke the kernel
 
-	; reset file pointer
-	;mov eax, 19           ; lseek system call number
-	;mov ebx, [descriptor] ; file descriptor
-	;mov ecx, 0            ; offset (seek from the beginning of the file)
-	;mov edx, 0            ; whence (SEEK_SET)
-	;int 0x80              ; invoke the kernel
-	
 	call resetpointer
 
 	; Check for errors in the lseek syscall (in eax)
@@ -143,13 +148,14 @@ end:
 
 ;; functions
 
-;readfile:
-;	mov eax, 3
-;	mov ebx, [descriptor]
-;	mov ecx, content
-;	mov edx, 552
-;	int 0x80
-;	ret
+readfile:
+	mov eax, 3
+	mov ebx, [descriptor]
+	mov ecx, content
+	mov edx, 552
+	int 0x80
+	ret
+
 
 readinput:
 	; read user input
@@ -160,6 +166,16 @@ readinput:
 	int 0x80
 	ret
 
+
+writeinput:
+	; write one line of user input after calling readinput
+	mov edx, eax    	; write number of bytes read
+	mov eax, 4			; syscall number for write
+	mov ebx, [descriptor]
+	mov ecx, input		; variable to write
+	int 0x80			; invoke the kernel
+
+
 resetpointer:
 	; reset file pointer
 	mov eax, 19           ; lseek system call number
@@ -168,4 +184,26 @@ resetpointer:
 	mov edx, 0            ; whence (SEEK_SET)
 	int 0x80              ; invoke the kernel
 	ret
+
+
+appendinput:
+	.loop:
+		call readinput
+
+		; check for newline in second byte of input
+		inc ecx		; buffer left over from read syscall
+		cmp byte [ecx], 10
+		je .command
+
+	.write:
+		call writeinput
+		call resetpointer
+		jmp .loop		; keep appending
+
+	.command:
+		; if . then stop appending
+		dec ecx
+		cmp byte [ecx], 46
+		jne .write 
+		ret
 
