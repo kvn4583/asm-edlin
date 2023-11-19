@@ -22,10 +22,12 @@ section .text
 _start:
 
 	; Open file for reading and writing
+	; Create if file does not exist
 	mov eax, 5			; System call number for open
 	mov ebx, filename	; Pointer to the filename
-	mov ecx, 1026		; bitwise 0x2|0x400 (read/write, append)
-	;mov edx, 0644
+	;mov ecx, 1026		; bitwise 0x2|0x400 (read/write, append)
+	mov ecx, 1090		; bitwise 0x2|0x400|0x40 (read/write, append, create)
+	mov edx, 0644o
 	int 0x80			; Call the kernel
 
     ; Check for errors in the open syscall (in eax)
