@@ -32,7 +32,7 @@ _start:
 
     ; Check for errors in the open syscall (in eax)
 	cmp eax, 0
-	jl end		; quit if there was an error
+	jl open_error
 
 	; Else store file descriptor in memory
 	mov [descriptor], eax
@@ -105,7 +105,7 @@ insert:
 
 	; Check for errors in the syscall (in eax)
 	cmp eax, 0
-	jl end
+	jl error
 
 	call appendinput
 
@@ -133,22 +133,40 @@ print:
 	call resetpointer
 
 	; Check for errors in the lseek syscall (in eax)
-	cmp eax, -1
-	je end 
+	;cmp eax, -1
+	cmp eax, 0
+	jl error 
 
 	jmp loop
 
-end:
-	mov eax, 6		; close file
-	mov ebx, [descriptor]
-	int 0x80
 
+;; close and quit
+
+end:
+	call closefile
 	mov eax, 1		; syscall number for exit
 	xor ebx, ebx	; exit code 0
 	int 0x80		; invoke the kernel
 
+error:
+	call closefile
+	mov eax, 1		; syscall number for exit
+	mov ebx, 1		; exit code 1
+	int 0x80		; invoke the kernel
+	
+open_error:
+	mov eax, 1		; syscall number for exit
+	mov ebx, 1		; exit code 1
+	int 0x80		; invoke the kernel
 
 ;; functions
+
+closefile:
+	mov eax, 6		; close file
+	mov ebx, [descriptor]
+	int 0x80
+	ret
+
 
 readfile:
 	mov eax, 3
