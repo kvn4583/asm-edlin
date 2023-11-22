@@ -10,16 +10,34 @@ section .bss
 	content resb 552	; file contents
 	descriptor resb 4	; file descriptor
 	filesize resb 4		; size of previous file contents
+	filename resb 7		; max length of filename
 
 section .data
-	marker db "> ", 0
-	filename db "out.txt", 0
+	marker			db	"> ", 0
+	err_msg_noargs	db	"ERROR: Missing filename; Exactly 1 argument required", 10
+	size_msg_noargs	equ	$-err_msg_noargs
+	err_msg_open	db	"ERROR: Failed to open file", 10
+	size_msg_open	equ $-err_msg_open
 
 section .text
 	global _start
 
 
 _start:
+
+	mov ebp, esp		; esp is the arg count
+	cmp dword [ebp], 1	; if no args (name of program only)
+	je err_noargs		; print error message and quit
+	
+	; TODO: Write a validation loop to check each character in filename
+	; above (ja) ascii code 127 is DEL key
+	; less than (jl) ascii code 32 are control chars
+	; make sure string is null terminated
+	mov ebx, [ebp + 8]		; assign address of arg
+	mov esi, ebx
+	mov edi, filename	; destination for eax
+	mov ecx, 7			; number of bytes to copy
+	rep movsb
 
 	; Open file for reading and writing
 	; Create if file does not exist
@@ -36,7 +54,7 @@ _start:
 
     ; Check for errors in the open syscall (in eax)
 	cmp eax, 0
-	jl open_error
+	jl err_open
 
 	; Else store file descriptor in memory
 	mov [descriptor], eax
@@ -86,7 +104,7 @@ command:
 
 	; else if q then quit
 	cmp byte [ecx], 113
-	je end
+	je close_quit
 
 	jmp loop
 
@@ -109,7 +127,7 @@ insert:
 
 	; Check for errors in the syscall (in eax)
 	cmp eax, 0
-	jl error
+	jl close_quit_err 
 
 	call appendinput
 
@@ -137,31 +155,50 @@ print:
 	call resetpointer
 
 	; Check for errors in the lseek syscall (in eax)
-	;cmp eax, -1
 	cmp eax, 0
-	jl error 
+	jl close_quit_err
 
 	jmp loop
 
 
 ;; close and quit
 
-end:
+close_quit:
 	call closefile
 	mov eax, 1		; syscall number for exit
 	xor ebx, ebx	; exit code 0
 	int 0x80		; invoke the kernel
 
-error:
+close_quit_err:
 	call closefile
 	mov eax, 1		; syscall number for exit
 	mov ebx, 1		; exit code 1
 	int 0x80		; invoke the kernel
 	
-open_error:
+quit_err:
+	; File never opens, so don't close
 	mov eax, 1		; syscall number for exit
 	mov ebx, 1		; exit code 1
 	int 0x80		; invoke the kernel
+
+
+;; print error messages
+
+err_noargs:
+	mov eax, 4
+	mov ebx, 1
+	mov ecx, err_msg_noargs
+	mov edx, size_msg_noargs
+	int 0x80
+	jmp quit_err
+
+err_open:
+	mov eax, 4
+	mov ebx, 1
+	mov ecx, err_msg_open
+	mov edx, size_msg_open
+	int 0x80
+	jmp quit_err
 
 
 ;; functions
