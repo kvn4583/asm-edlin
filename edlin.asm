@@ -25,8 +25,12 @@ _start:
 	; Create if file does not exist
 	mov eax, 5			; System call number for open
 	mov ebx, filename	; Pointer to the filename
-	;mov ecx, 1026		; bitwise 0x2|0x400 (read/write, append)
-	mov ecx, 1090		; bitwise 0x2|0x400|0x40 (read/write, append, create)
+
+	; Perform bitwise or to combine args in assembly
+	mov ecx, 0x2	; read/write - O_RDWR
+	or ecx, 0x40	; create - O_CREAT
+	or ecx, 0x400	; append - O_APPEND
+
 	mov edx, 0644o
 	int 0x80			; Call the kernel
 
@@ -158,6 +162,7 @@ open_error:
 	mov eax, 1		; syscall number for exit
 	mov ebx, 1		; exit code 1
 	int 0x80		; invoke the kernel
+
 
 ;; functions
 
