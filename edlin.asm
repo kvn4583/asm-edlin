@@ -6,11 +6,13 @@
 ; q for quit (and write to file)
 
 section .bss
-	input resb 80		; limit lines to 80 characters
-	content resb 552	; file contents
 	descriptor resb 4	; file descriptor
 	filesize resb 4		; size of previous file contents
+	oldfilesize resb 4
+	progbreak resb 4	; address for end of data segment
 	filename resb 7		; max length of filename
+	input resb 80		; limit lines to 80 characters
+	content resb 0 
 
 section .data
 	marker			db	"> ", 0
@@ -58,6 +60,23 @@ _start:
 
 	; Else store file descriptor in memory
 	mov [descriptor], eax
+
+	; set initial filesize
+	call setfilesize
+
+	; Find program break
+	;mov eax, 45	; brk syscall
+	;mov ebx, 0	; get end of data segment
+	;int 0x80
+
+	; Store address for initial program break in memory
+	;mov [progbreak], eax	
+
+	; Increment program break address by filesize and set new break address
+	;mov eax, 45	; brk syscall
+	;mov ebx, [progbreak]
+	;add ebx, [filesize]
+	;int 0x80
 
 
 loop:
@@ -129,16 +148,20 @@ insert:
 	cmp eax, 0
 	jl close_quit_err 
 
+	; Save old filesize for appending old content
+	mov eax, [filesize]
+	mov [oldfilesize], eax
 	call appendinput
 
 	; append old file contents
-	mov edx, [filesize] 
+	mov edx, [oldfilesize] 
 	mov eax, 4				; syscall number for write
 	mov ebx, [descriptor]	; file descriptor for stdout
 	mov ecx, content		; variable to write
 	int 0x80				; invoke the kernel
 
 	call resetpointer
+	call setfilesize
 	jmp loop
 
 
@@ -211,10 +234,11 @@ closefile:
 
 
 readfile:
+	call setfilesize
 	mov eax, 3
 	mov ebx, [descriptor]
 	mov ecx, content
-	mov edx, 552
+	mov edx, [filesize]
 	int 0x80
 	ret
 
@@ -236,6 +260,22 @@ writeinput:
 	mov ebx, [descriptor]
 	mov ecx, input		; variable to write
 	int 0x80			; invoke the kernel
+	ret
+
+
+setfilesize:
+	; Get new filesize using lseek syscall
+	mov eax, 19       ; syscall number for lseek
+	mov ebx, [descriptor]      ; file descriptor
+	mov ecx, 0        ; offset
+	mov edx, 2        ; SEEK_END
+	int 0x80          ; make the system call
+
+	; Save return value to memory
+	mov [filesize], eax
+
+	call resetpointer
+	ret
 
 
 resetpointer:
@@ -246,6 +286,8 @@ resetpointer:
 	mov edx, 0            ; whence (SEEK_SET)
 	int 0x80              ; invoke the kernel
 	ret
+
+
 
 
 appendinput:
@@ -259,7 +301,7 @@ appendinput:
 
 	.write:
 		call writeinput
-		call resetpointer
+		call setfilesize
 		jmp .loop		; keep appending
 
 	.command:
