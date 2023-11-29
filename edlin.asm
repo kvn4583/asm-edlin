@@ -35,6 +35,8 @@ _start:
 	; above (ja) ascii code 127 is DEL key
 	; less than (jl) ascii code 32 are control chars
 	; make sure string is null terminated
+
+	; Copy first cmd line arg to memory labeled filename
 	mov ebx, [ebp + 8]		; assign address of arg
 	mov esi, ebx
 	mov edi, filename	; destination for eax
@@ -65,18 +67,18 @@ _start:
 	call setfilesize
 
 	; Find program break
-	;mov eax, 45	; brk syscall
-	;mov ebx, 0	; get end of data segment
-	;int 0x80
+	mov eax, 45	; brk syscall
+	mov ebx, 0	; get end of data segment
+	int 0x80
 
 	; Store address for initial program break in memory
-	;mov [progbreak], eax	
+	mov [progbreak], eax	
 
 	; Increment program break address by filesize and set new break address
-	;mov eax, 45	; brk syscall
-	;mov ebx, [progbreak]
-	;add ebx, [filesize]
-	;int 0x80
+	mov eax, 45	; brk syscall
+	mov ebx, [progbreak]
+	add ebx, [filesize]
+	int 0x80
 
 
 loop:
