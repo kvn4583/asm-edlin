@@ -8,18 +8,22 @@
 section .bss
 	descriptor resb 4	; file descriptor
 	filesize resb 4		; size of previous file contents
-	oldfilesize resb 4
+	oldfilesize resb 4	; size of previous file contents to append (insert mode)
 	progbreak resb 4	; address for end of data segment
-	filename resb 7		; max length of filename
+	argsize resb 4		; number of chars in filename
+	filename resb FILENAME_LIMIT	; max length of filename
 	input resb 80		; limit lines to 80 characters
 	content resb 0 
 
 section .data
+	FILENAME_LIMIT	equ 7	; For ascii representation add 48 or '0'
 	marker			db	"> ", 0
-	err_msg_noargs	db	"ERROR: Missing filename; Exactly 1 argument required", 10
+	err_msg_noargs	db	"ERROR: Missing filename; Exactly 1 argument required", 10, 0
 	size_msg_noargs	equ	$-err_msg_noargs
-	err_msg_open	db	"ERROR: Failed to open file", 10
+	err_msg_open	db	"ERROR: Failed to open file", 10, 0
 	size_msg_open	equ $-err_msg_open
+	err_msg_arglen	db	"ERROR: Filename must be ", FILENAME_LIMIT + '0', " characters or less", 10, 0
+	size_msg_arglen	equ $-err_msg_arglen
 
 section .text
 	global _start
@@ -36,11 +40,31 @@ _start:
 	; less than (jl) ascii code 32 are control chars
 	; make sure string is null terminated
 
+	; Set up first cmd line arg for validation
+	mov esi, [ebp + 8]	; address of first arg
+	xor ecx, ecx		; use ecx as counter set to 0
+
+	jmp length
+
+count:
+	inc esi				; advance to next char
+	inc ecx				; count char
+	
+length:
+	; Get length of first cmd line arg
+	cmp byte [esi], 0	; check if first char is zero byte (end of string)
+	jne count			; If not zero, start counting
+
+	mov [argsize], ecx	; save length to memory
+
+	; Exit if filename is too long
+	cmp dword [argsize], FILENAME_LIMIT 
+	jg err_arglen	; error if argsize > limit
+
 	; Copy first cmd line arg to memory labeled filename
-	mov ebx, [ebp + 8]		; assign address of arg
-	mov esi, ebx
-	mov edi, filename	; destination for eax
-	mov ecx, 7			; number of bytes to copy
+	mov esi, [ebp + 8]	; source addr for movsb
+	mov edi, filename	; destination addr for movsb
+	mov ecx, FILENAME_LIMIT		; number of bytes to copy
 	rep movsb
 
 	; Open file for reading and writing
@@ -224,6 +248,15 @@ err_open:
 	mov edx, size_msg_open
 	int 0x80
 	jmp quit_err
+
+err_arglen:
+	mov eax, 4
+	mov ebx, 1
+	mov ecx, err_msg_arglen
+	mov edx, size_msg_arglen
+	int 0x80
+	jmp quit_err
+
 
 
 ;; functions
