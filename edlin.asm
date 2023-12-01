@@ -13,7 +13,7 @@ section .bss
 	argsize resb 4		; number of chars in filename
 	filename resb FILENAME_LIMIT	; max length of filename
 	input resb 80		; limit lines to 80 characters
-	content resb 0 
+	content resb 4		; Pointer to content in heap
 
 section .data
 	FILENAME_LIMIT	equ 7	; For ascii representation add 48 or '0'
@@ -104,6 +104,10 @@ length:
 	add ebx, [filesize]
 	int 0x80
 
+	; Move break pointer to content pointer
+	mov eax, [progbreak]
+	mov [content], eax
+
 
 loop:
 	; Show marker designating user input
@@ -183,7 +187,7 @@ insert:
 	mov edx, [oldfilesize] 
 	mov eax, 4				; syscall number for write
 	mov ebx, [descriptor]	; file descriptor for stdout
-	mov ecx, content		; variable to write
+	mov ecx, [content]		; addr of dynamically allocated memory in heap
 	int 0x80				; invoke the kernel
 
 	call resetpointer
@@ -198,7 +202,7 @@ print:
 	mov edx, eax    	; write number of bytes read
 	mov eax, 4			; syscall number for write
 	mov ebx, 1			; file descriptor for stdout
-	mov ecx, content	; variable to write
+	mov ecx, [content]	; addr to write to
 	int 0x80			; invoke the kernel
 
 	call resetpointer
@@ -272,7 +276,7 @@ readfile:
 	call setfilesize
 	mov eax, 3
 	mov ebx, [descriptor]
-	mov ecx, content
+	mov ecx, [content]
 	mov edx, [filesize]
 	int 0x80
 	ret
